@@ -3,37 +3,45 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4-Relay Live Control</title>
+<title>4-Relay Control Dashboard</title>
 <style>
   body { font-family: Arial, sans-serif; text-align:center; background:#f4f4f9; color:#333; }
-  h2 { margin-top: 30px; }
-  button { width: 140px; height: 60px; font-size:20px; margin:10px; border:none; border-radius:10px; cursor:pointer; color:white; }
+  h2 { margin-top: 20px; }
+  .relay-container { margin: 20px; }
+  button { width: 100px; height: 50px; font-size:18px; margin:5px; border:none; border-radius:10px; cursor:pointer; color:white; }
   button:active { transform:translateY(2px); }
-  .relay-on { background: limegreen; }
-  .relay-off { background: tomato; }
-  .relay-unknown { background: gray; }
+  .on { background: limegreen; }
+  .off { background: tomato; }
+  .disabled { background: gray; cursor: not-allowed; }
   #mqttStatus { font-weight:bold; font-size:18px; margin-top:20px; }
 </style>
 </head>
 <body>
 
-<h2>4-Relay Live Control</h2>
+<h2>4-Relay Control Dashboard</h2>
 
-<div>
+<div class="relay-container">
   <p>Relay 1 Status: <b id="relay1Status">--</b></p>
-  <button id="relay1Btn" onclick="toggleRelay(1)">Toggle Relay 1</button>
+  <button id="relay1On" onclick="sendCommand(1,'ON')">ON</button>
+  <button id="relay1Off" onclick="sendCommand(1,'OFF')">OFF</button>
 </div>
-<div>
+
+<div class="relay-container">
   <p>Relay 2 Status: <b id="relay2Status">--</b></p>
-  <button id="relay2Btn" onclick="toggleRelay(2)">Toggle Relay 2</button>
+  <button id="relay2On" onclick="sendCommand(2,'ON')">ON</button>
+  <button id="relay2Off" onclick="sendCommand(2,'OFF')">OFF</button>
 </div>
-<div>
+
+<div class="relay-container">
   <p>Relay 3 Status: <b id="relay3Status">--</b></p>
-  <button id="relay3Btn" onclick="toggleRelay(3)">Toggle Relay 3</button>
+  <button id="relay3On" onclick="sendCommand(3,'ON')">ON</button>
+  <button id="relay3Off" onclick="sendCommand(3,'OFF')">OFF</button>
 </div>
-<div>
+
+<div class="relay-container">
   <p>Relay 4 Status: <b id="relay4Status">--</b></p>
-  <button id="relay4Btn" onclick="toggleRelay(4)">Toggle Relay 4</button>
+  <button id="relay4On" onclick="sendCommand(4,'ON')">ON</button>
+  <button id="relay4Off" onclick="sendCommand(4,'OFF')">OFF</button>
 </div>
 
 <p id="mqttStatus">MQTT: Disconnected</p>
@@ -51,59 +59,63 @@ const options = {
 };
 const client = mqtt.connect(broker, options);
 
-// ------------------------ UI ELEMENTS ------------------------
+// ------------------------ RELAY STATUS ------------------------
 let relayStatus = [null,"OFF","OFF","OFF","OFF"];
-const statusEls = [
-  null,
-  document.getElementById("relay1Status"),
-  document.getElementById("relay2Status"),
-  document.getElementById("relay3Status"),
-  document.getElementById("relay4Status")
-];
-const btnEls = [
-  null,
-  document.getElementById("relay1Btn"),
-  document.getElementById("relay2Btn"),
-  document.getElementById("relay3Btn"),
-  document.getElementById("relay4Btn")
-];
-const mqttStatusEl = document.getElementById("mqttStatus");
 
-// ------------------------ UI UPDATE ------------------------
-function updateRelayUI(ch){
-  statusEls[ch].innerText = relayStatus[ch];
-  if(relayStatus[ch]==="ON") btnEls[ch].className="relay-on";
-  else if(relayStatus[ch]==="OFF") btnEls[ch].className="relay-off";
-  else btnEls[ch].className="relay-unknown";
+// ------------------------ UPDATE UI ------------------------
+function updateUI(ch){
+  const statusEl = document.getElementById(`relay${ch}Status`);
+  const onBtn = document.getElementById(`relay${ch}On`);
+  const offBtn = document.getElementById(`relay${ch}Off`);
+  
+  statusEl.innerText = relayStatus[ch];
+
+  if(relayStatus[ch]==="ON"){
+    onBtn.className="on";
+    offBtn.className="off";
+  } else if(relayStatus[ch]==="OFF"){
+    onBtn.className="off";
+    offBtn.className="on";
+  } else {
+    onBtn.className="disabled";
+    offBtn.className="disabled";
+  }
 }
 
-// ------------------------ TOGGLE RELAY ------------------------
-function toggleRelay(ch){
-  const cmd = relayStatus[ch]==="ON"?"OFF":"ON";
-  if(client.connected) client.publish(`relay${ch}/control`, cmd);
+// ------------------------ SEND COMMAND ------------------------
+function sendCommand(ch, cmd){
+  if(client.connected){
+    client.publish(`relay${ch}/control`, cmd);
+  } else {
+    alert("MQTT is not connected!");
+  }
 }
 
 // ------------------------ MQTT EVENTS ------------------------
 client.on("connect", () => {
+  const mqttStatusEl = document.getElementById("mqttStatus");
   mqttStatusEl.innerText = "MQTT: Connected";
   mqttStatusEl.style.color = "limegreen";
-  // Subscribe to relay status topics
+
   for(let i=1;i<=4;i++){
     client.subscribe(`relay${i}/status`);
   }
 });
 
 client.on("reconnect", () => {
+  const mqttStatusEl = document.getElementById("mqttStatus");
   mqttStatusEl.innerText = "MQTT: Reconnecting...";
   mqttStatusEl.style.color = "orange";
 });
 
 client.on("offline", () => {
+  const mqttStatusEl = document.getElementById("mqttStatus");
   mqttStatusEl.innerText = "MQTT: Offline";
   mqttStatusEl.style.color = "red";
 });
 
 client.on("error", () => {
+  const mqttStatusEl = document.getElementById("mqttStatus");
   mqttStatusEl.innerText = "MQTT: Error";
   mqttStatusEl.style.color = "red";
 });
@@ -112,11 +124,12 @@ client.on("message", (topic, message) => {
   const msg = message.toString();
   for(let i=1;i<=4;i++){
     if(topic===`relay${i}/status`){
-      relayStatus[i]=msg;
-      updateRelayUI(i);
+      relayStatus[i] = msg;
+      updateUI(i);
     }
   }
 });
 </script>
+
 </body>
 </html>
