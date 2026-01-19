@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4-Channel Relay Control</title>
+<title>4-Relay Live Control</title>
 <style>
   body { font-family: Arial, sans-serif; text-align:center; background:#f4f4f9; color:#333; }
   h2 { margin-top: 30px; }
@@ -17,7 +17,7 @@
 </head>
 <body>
 
-<h2>4-Channel Relay Control</h2>
+<h2>4-Relay Live Control</h2>
 
 <div>
   <p>Relay 1 Status: <b id="relay1Status">--</b></p>
@@ -80,7 +80,7 @@ function updateRelayUI(ch){
 // ------------------------ TOGGLE RELAY ------------------------
 function toggleRelay(ch){
   const cmd = relayStatus[ch]==="ON"?"OFF":"ON";
-  client.publish(`relay${ch}/control`, cmd);
+  if(client.connected) client.publish(`relay${ch}/control`, cmd);
 }
 
 // ------------------------ MQTT EVENTS ------------------------
