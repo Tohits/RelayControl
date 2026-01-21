@@ -1,135 +1,151 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4-Relay Control Dashboard</title>
+<title>4-Channel Relay Control Dashboard</title>
 <style>
   body { font-family: Arial, sans-serif; text-align:center; background:#f4f4f9; color:#333; }
   h2 { margin-top: 20px; }
-  .relay-container { margin: 20px; }
-  button { width: 100px; height: 50px; font-size:18px; margin:5px; border:none; border-radius:10px; cursor:pointer; color:white; }
-  button:active { transform:translateY(2px); }
+  .relay-container { margin: 20px auto; width: 300px; }
+  .relay-container p { font-size: 20px; }
+  button { width: 120px; height: 50px; font-size: 18px; margin: 5px; border:none; border-radius:10px; cursor:pointer; color:white; box-shadow:0 4px #666; transition:0.2s; }
+  button:active { box-shadow:0 2px #666; transform:translateY(2px); }
   .on { background: limegreen; }
   .off { background: tomato; }
   .disabled { background: gray; cursor: not-allowed; }
-  #mqttStatus { font-weight:bold; font-size:18px; margin-top:20px; }
+
+  #mqttStatus { font-weight:bold; font-size:18px; margin-top:10px; }
+  .online { color: limegreen; font-weight: bold; }
+  .offline { color: red; font-weight: bold; }
+
+  .water-box { width: 260px; margin: 15px auto; background:#ddd; border-radius:15px; overflow:hidden; }
+  .water-level { height:30px; background:#2196f3; width:0%; color:white; font-weight:bold; line-height:30px; }
 </style>
 </head>
 <body>
 
-<h2>Light Control Dashboard</h2>
+<h2>4-Channel Relay Dashboard</h2>
 
 <div class="relay-container">
-  <p>LIGHT 1 Status: <b id="relay1Status">--</b></p>
+  <p>Relay 1 Status: <b id="relay1Status">--</b></p>
   <button id="relay1On" onclick="sendCommand(1,'ON')">ON</button>
   <button id="relay1Off" onclick="sendCommand(1,'OFF')">OFF</button>
 </div>
 
 <div class="relay-container">
-  <p>LIGHT 2 Status: <b id="relay2Status">--</b></p>
+  <p>Relay 2 Status: <b id="relay2Status">--</b></p>
   <button id="relay2On" onclick="sendCommand(2,'ON')">ON</button>
   <button id="relay2Off" onclick="sendCommand(2,'OFF')">OFF</button>
 </div>
 
 <div class="relay-container">
-  <p>LIGHT 3 Status: <b id="relay3Status">--</b></p>
+  <p>Relay 3 Status: <b id="relay3Status">--</b></p>
   <button id="relay3On" onclick="sendCommand(3,'ON')">ON</button>
   <button id="relay3Off" onclick="sendCommand(3,'OFF')">OFF</button>
 </div>
 
 <div class="relay-container">
-  <p>LIGHT 4 Status: <b id="relay4Status">--</b></p>
+  <p>Relay 4 Status: <b id="relay4Status">--</b></p>
   <button id="relay4On" onclick="sendCommand(4,'ON')">ON</button>
   <button id="relay4Off" onclick="sendCommand(4,'OFF')">OFF</button>
 </div>
 
-<p id="mqttStatus">MQTT: Disconnected</p>
+<hr>
+
+<p>ESP Status: <span id="espStatus" class="offline">OFFLINE</span></p>
+<p>ESP IP: <b id="espIP">--</b></p>
+<p>ESP Uptime: <b id="espUptime">--:--:--</b></p>
+
+<p>Water Level:</p>
+<div class="water-box">
+  <div id="waterLevelBar" class="water-level">0%</div>
+</div>
+
+<button id="resetBtn" onclick="resetESP()">RESET ESP</button>
+
+<p>MQTT Status: <span id="mqttStatus">Disconnected</span></p>
 
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
-// ------------------------ MQTT SETUP ------------------------
 const broker = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
-const options = {
-  username: 'tohits',
-  password: 'toh123@TOH',
-  reconnectPeriod: 1000,
-  clean: true,
-  connectTimeout: 4000,
-};
+const options = { username:'tohits', password:'toh123@TOH', reconnectPeriod:1000, clean:true, connectTimeout:4000 };
 const client = mqtt.connect(broker, options);
 
-// ------------------------ RELAY STATUS ------------------------
-let relayStatus = [null,"OFF","OFF","OFF","OFF"];
+let relayStatus = [null,"OFF","OFF","OFF","OFF"]; // relay1..4
 
-// ------------------------ UPDATE UI ------------------------
 function updateUI(ch){
   const statusEl = document.getElementById(`relay${ch}Status`);
   const onBtn = document.getElementById(`relay${ch}On`);
   const offBtn = document.getElementById(`relay${ch}Off`);
-  
   statusEl.innerText = relayStatus[ch];
-
-  // UI color logic
   if(relayStatus[ch]==="ON"){
-    onBtn.className="on";    // green
-    offBtn.className="off";  // red
+    onBtn.className="on";
+    offBtn.className="off";
   } else if(relayStatus[ch]==="OFF"){
-    onBtn.className="off";   // red
-    offBtn.className="on";   // green
+    onBtn.className="off";
+    offBtn.className="on";
   } else {
     onBtn.className="disabled";
     offBtn.className="disabled";
   }
 }
 
-// ------------------------ SEND COMMAND (SWAPPED) ------------------------
 function sendCommand(ch, cmd){
   if(client.connected){
-    // Swap ON/OFF for firmware active-low
-    let swappedCmd = (cmd === "ON") ? "OFF" : "ON";
-    client.publish(`relay${ch}/control`, swappedCmd);
-  } else {
-    alert("MQTT is not connected!");
+    // swap for active-low relay
+    const swap = (cmd==="ON")?"OFF":"ON";
+    client.publish(`relay${ch}/control`, swap);
   }
 }
 
-// ------------------------ MQTT EVENTS ------------------------
-client.on("connect", () => {
-  const mqttStatusEl = document.getElementById("mqttStatus");
-  mqttStatusEl.innerText = "MQTT: Connected";
-  mqttStatusEl.style.color = "limegreen";
-
-  for(let i=1;i<=4;i++){
-    client.subscribe(`relay${i}/status`);
+function resetESP(){
+  if(client.connected && confirm("Reset ESP?")){
+    client.publish('esp/reset','RESET');
   }
+}
+
+client.on('connect', ()=>{
+  const mqttStatusEl = document.getElementById('mqttStatus');
+  mqttStatusEl.innerText='Connected';
+  mqttStatusEl.style.color='limegreen';
+  for(let i=1;i<=4;i++) client.subscribe(`relay${i}/status`);
+  client.subscribe(['esp/status','esp/ip','esp/uptime','sensor/waterLevel']);
 });
 
-client.on("reconnect", () => {
-  const mqttStatusEl = document.getElementById("mqttStatus");
-  mqttStatusEl.innerText = "MQTT: Reconnecting...";
-  mqttStatusEl.style.color = "orange";
-});
+client.on('reconnect',()=>{ document.getElementById('mqttStatus').innerText='Reconnecting...'; });
+client.on('offline',()=>{ document.getElementById('mqttStatus').innerText='Offline'; document.getElementById('mqttStatus').style.color='red'; });
+client.on('error',()=>{ document.getElementById('mqttStatus').innerText='Error'; document.getElementById('mqttStatus').style.color='red'; });
 
-client.on("offline", () => {
-  const mqttStatusEl = document.getElementById("mqttStatus");
-  mqttStatusEl.innerText = "MQTT: Offline";
-  mqttStatusEl.style.color = "red";
-});
-
-client.on("error", () => {
-  const mqttStatusEl = document.getElementById("mqttStatus");
-  mqttStatusEl.innerText = "MQTT: Error";
-  mqttStatusEl.style.color = "red";
-});
-
-client.on("message", (topic, message) => {
-  const msg = message.toString();
+client.on('message',(topic,msgRaw)=>{
+  const msg = msgRaw.toString();
   for(let i=1;i<=4;i++){
-    if(topic===`relay${i}/status`){
-      relayStatus[i] = msg;
-      updateUI(i);
-    }
+    if(topic===`relay${i}/status`){ relayStatus[i]=msg; updateUI(i); }
+  }
+
+  if(topic==='esp/status'){
+    const el=document.getElementById('espStatus');
+    el.innerText=msg;
+    el.className=(msg==='ONLINE')?'online':'offline';
+  }
+
+  if(topic==='esp/ip') document.getElementById('espIP').innerText=msg;
+
+  if(topic==='esp/uptime'){
+    let s=parseInt(msg);
+    let h=Math.floor(s/3600);
+    let m=Math.floor((s%3600)/60);
+    let sec=s%60;
+    document.getElementById('espUptime').innerText=(`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`);
+  }
+
+  if(topic==='sensor/waterLevel'){
+    let level=parseInt(msg);
+    if(level<0) level=0;
+    if(level>100) level=100;
+    const bar=document.getElementById('waterLevelBar');
+    bar.style.width=level+'%';
+    bar.innerText=level+'%';
   }
 });
 </script>
