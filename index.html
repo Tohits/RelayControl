@@ -32,6 +32,9 @@
     transform: translateY(2px);
     background: #666;
   }
+
+  .online { color: limegreen; font-weight: bold; }
+  .offline { color: red; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -66,7 +69,7 @@
 
 <p>ESP Status: <span id="espStatus" class="offline">OFFLINE</span></p>
 <p>ESP IP: <b id="espIP">--</b></p>
-<p>ESP Uptime: <b id="espUptime">--:--:--</b></p>
+<p>ESP Uptime: <b id="espUptime">00:00:00</b></p>
 <button id="resetBtn" onclick="resetESP()">RESET ESP</button>
 
 <p id="mqttStatus">MQTT: Disconnected</p>
@@ -135,6 +138,11 @@
   client.on('offline', () => {
     document.getElementById("mqttStatus").innerText = "MQTT: Offline";
     document.getElementById("mqttStatus").style.color = "red";
+
+    // MARK ESP OFFLINE if MQTT disconnects
+    const espStatus = document.getElementById('espStatus');
+    espStatus.innerText = 'OFFLINE';
+    espStatus.className = 'offline';
   });
 
   client.on('error', () => {
@@ -142,6 +150,7 @@
     document.getElementById("mqttStatus").style.color = "red";
   });
 
+  // ---------- MQTT Messages ----------
   client.on('message', (topic,message)=>{
     const msg = message.toString();
 
@@ -163,13 +172,8 @@
     if(topic==='esp/ip') document.getElementById('espIP').innerText = msg;
 
     if(topic==='esp/uptime'){
-      let totalSec = parseInt(msg);
-      let hours = Math.floor(totalSec / 3600);
-      let minutes = Math.floor((totalSec % 3600) / 60);
-      let seconds = totalSec % 60;
-
-      const formatted = `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
-      document.getElementById('espUptime').innerText = formatted;
+      // msg is already sent from ESP as HH:MM:SS string
+      document.getElementById('espUptime').innerText = msg;
     }
   });
 </script>
