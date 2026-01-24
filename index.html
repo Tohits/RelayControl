@@ -24,27 +24,27 @@
 <h2>4-Channel Relay Control</h2>
 
 <div class="relay-container">
-  <p>Relay 1 Status: <b id="relay1Status">--</b></p>
-  <button id="relay1On" onclick="sendCommand(1,'ON')">ON</button>
-  <button id="relay1Off" onclick="sendCommand(1,'OFF')">OFF</button>
+  <p>Relay 1 Status: <b id="relay1Status">ON</b></p>  <!-- ✅ CHANGED: Initial ON -->
+  <button id="relay1On" class="off" onclick="sendCommand(1,'ON')">ON</button>   <!-- ✅ Initial styling -->
+  <button id="relay1Off" class="on" onclick="sendCommand(1,'OFF')">OFF</button> <!-- ✅ Initial styling -->
 </div>
 
 <div class="relay-container">
-  <p>Relay 2 Status: <b id="relay2Status">--</b></p>
-  <button id="relay2On" onclick="sendCommand(2,'ON')">ON</button>
-  <button id="relay2Off" onclick="sendCommand(2,'OFF')">OFF</button>
+  <p>Relay 2 Status: <b id="relay2Status">ON</b></p>
+  <button id="relay2On" class="off" onclick="sendCommand(2,'ON')">ON</button>
+  <button id="relay2Off" class="on" onclick="sendCommand(2,'OFF')">OFF</button>
 </div>
 
 <div class="relay-container">
-  <p>Relay 3 Status: <b id="relay3Status">--</b></p>
-  <button id="relay3On" onclick="sendCommand(3,'ON')">ON</button>
-  <button id="relay3Off" onclick="sendCommand(3,'OFF')">OFF</button>
+  <p>Relay 3 Status: <b id="relay3Status">ON</b></p>
+  <button id="relay3On" class="off" onclick="sendCommand(3,'ON')">ON</button>
+  <button id="relay3Off" class="on" onclick="sendCommand(3,'OFF')">OFF</button>
 </div>
 
 <div class="relay-container">
-  <p>Relay 4 Status: <b id="relay4Status">--</b></p>
-  <button id="relay4On" onclick="sendCommand(4,'ON')">ON</button>
-  <button id="relay4Off" onclick="sendCommand(4,'OFF')">OFF</button>
+  <p>Relay 4 Status: <b id="relay4Status">ON</b></p>
+  <button id="relay4On" class="off" onclick="sendCommand(4,'ON')">ON</button>
+  <button id="relay4Off" class="on" onclick="sendCommand(4,'OFF')">OFF</button>
 </div>
 
 <hr>
@@ -67,21 +67,22 @@
   };
   const client = mqtt.connect(broker, options);
 
-  let relayStatus = [null,"OFF","OFF","OFF","OFF"]; // 1..4
+  // ✅ INITIAL STATE: ALL RELAYS ON (matches hardware)
+  let relayStatus = [null,"ON","ON","ON","ON"]; 
 
   function updateRelayUI(ch){
     const statusEl = document.getElementById(`relay${ch}Status`);
     const onBtn = document.getElementById(`relay${ch}On`);
     const offBtn = document.getElementById(`relay${ch}Off`);
 
-    statusEl.innerText = relayStatus[ch] || "--";
+    statusEl.innerText = relayStatus[ch] || "ON";  // ✅ Default ON
 
     if(relayStatus[ch]==="ON"){
-      onBtn.className = "on";
-      offBtn.className = "off";
+      onBtn.className = "on";      // ON button GREEN
+      offBtn.className = "off";    // OFF button RED
     } else {
-      onBtn.className = "off";
-      offBtn.className = "on";
+      onBtn.className = "off";     // ON button RED
+      offBtn.className = "on";     // OFF button GREEN
     }
   }
 
@@ -93,18 +94,20 @@
     }
   }
 
+  // ✅ Initialize UI on page load (ALL ON)
+  window.onload = function() {
+    for(let ch=1; ch<=4; ch++) {
+      updateRelayUI(ch);
+    }
+  };
+
   // ---------- MQTT EVENTS ----------
   client.on('connect', () => {
     document.getElementById("mqttStatus").innerText = "MQTT: Connected ✅";
     document.getElementById("mqttStatus").style.color = "limegreen";
     client.subscribe([
-      'relay1/status',
-      'relay2/status', 
-      'relay3/status',
-      'relay4/status',
-      'esp/+/status',     // ✅ FIX 1: Catches esp/1234/status, esp/5678/status
-      'esp/+/ip',         // ✅ FIX 2: Catches esp/1234/ip
-      'esp/+/uptime'      // ✅ FIX 3: Catches esp/1234/uptime
+      'relay1/status','relay2/status','relay3/status','relay4/status',
+      'esp/+/status','esp/+/ip','esp/+/uptime'
     ]);
   });
 
@@ -137,19 +140,19 @@
       updateRelayUI(ch);
     }
 
-    // ✅ FIX 4: ESP status from esp/XXXX/status
+    // ESP status from esp/XXXX/status
     if(topic.match(/^esp\/\d+\/status$/)){
       const espStatusEl = document.getElementById('espStatus');
       espStatusEl.innerText = msg;
       espStatusEl.className = (msg==="ONLINE") ? "online" : "offline";
     }
 
-    // ✅ FIX 5: ESP IP from esp/XXXX/ip
+    // ESP IP from esp/XXXX/ip
     if(topic.match(/^esp\/\d+\/ip$/)){
       document.getElementById('espIP').innerText = msg;
     }
 
-    // ✅ FIX 6: ESP uptime from esp/XXXX/uptime
+    // ESP uptime from esp/XXXX/uptime
     if(topic.match(/^esp\/\d+\/uptime$/)){
       document.getElementById('espUptime').innerText = msg;
     }
