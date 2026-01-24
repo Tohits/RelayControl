@@ -14,25 +14,7 @@
   .off { background: tomato; }
   .disabled { background: gray; cursor: not-allowed; }
 
-  #espStatus { font-weight:bold; font-size:18px; }
-  #mqttStatus { font-weight:bold; font-size:18px; margin-top:10px; }
-
-  /* Reset button style */
-  #resetBtn {
-    background: #444;
-    color: white;
-    width: 120px;
-    height: 50px;
-    font-size: 16px;
-    border-radius: 10px;
-    margin-top: 10px;
-    cursor: pointer;
-  }
-  #resetBtn:active {
-    transform: translateY(2px);
-    background: #666;
-  }
-
+  #espStatus, #mqttStatus { font-weight:bold; font-size:18px; margin-top:10px; }
   .online { color: limegreen; font-weight: bold; }
   .offline { color: red; font-weight: bold; }
 </style>
@@ -70,7 +52,7 @@
 <p>ESP Status: <span id="espStatus" class="offline">OFFLINE</span></p>
 <p>ESP IP: <b id="espIP">--</b></p>
 <p>ESP Uptime: <b id="espUptime">00:00:00</b></p>
-<button id="resetBtn" onclick="resetESP()">RESET ESP</button>
+<!-- ✅ REMOVED: Reset button & CSS -->
 
 <p id="mqttStatus">MQTT: Disconnected</p>
 
@@ -109,16 +91,11 @@
 
   function sendCommand(ch, cmd){
     if(client.connected){
-      const swapped = (cmd==="ON")?"OFF":"ON"; // Active-low
-      client.publish(`relay${ch}/control`, swapped);
+      client.publish(`relay${ch}/control`, cmd);  // ✅ Direct ON/OFF
     } else alert("MQTT not connected!");
   }
 
-  function resetESP(){
-    if(client.connected && confirm("Reset ESP?")){
-      client.publish('esp/reset','RESET');
-    }
-  }
+  // ✅ REMOVED: resetESP() function
 
   // ---------- MQTT EVENTS ----------
   client.on('connect', () => {
@@ -126,7 +103,7 @@
     document.getElementById("mqttStatus").style.color = "limegreen";
     client.subscribe([
       'relay1/status','relay2/status','relay3/status','relay4/status',
-      'esp/status','esp/ip','esp/uptime'
+      'esp/+/status','esp/+/ip','esp/+/uptime'  // ✅ Fixed for unique ESP topics
     ]);
   });
 
@@ -138,8 +115,6 @@
   client.on('offline', () => {
     document.getElementById("mqttStatus").innerText = "MQTT: Offline";
     document.getElementById("mqttStatus").style.color = "red";
-
-    // MARK ESP OFFLINE if MQTT disconnects
     const espStatus = document.getElementById('espStatus');
     espStatus.innerText = 'OFFLINE';
     espStatus.className = 'offline';
@@ -154,25 +129,25 @@
   client.on('message', (topic,message)=>{
     const msg = message.toString();
 
-    if(topic.startsWith('relay')){
-      for(let i=1;i<=4;i++){
-        if(topic===`relay${i}/status`){
-          relayStatus[i] = msg;
-          updateRelayUI(i);
-        }
-      }
+    // Relay status
+    if(topic.match(/^relay[1-4]\/status$/)){
+      const ch = parseInt(topic.charAt(5));
+      relayStatus[ch] = msg;
+      updateRelayUI(ch);
     }
 
-    if(topic==='esp/status'){
+    // ESP status (esp/1234/status format)
+    if(topic.match(/^esp\/\d+\/status$/)){
       const espStatus = document.getElementById('espStatus');
       espStatus.innerText = msg;
       espStatus.className = (msg==="ONLINE")?"online":"offline";
     }
 
-    if(topic==='esp/ip') document.getElementById('espIP').innerText = msg;
+    if(topic.match(/^esp\/\d+\/ip$/)){
+      document.getElementById('espIP').innerText = msg;
+    }
 
-    if(topic==='esp/uptime'){
-      // msg is already sent from ESP as HH:MM:SS string
+    if(topic.match(/^esp\/\d+\/uptime$/)){
       document.getElementById('espUptime').innerText = msg;
     }
   });
