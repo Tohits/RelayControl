@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NodeMCU 4-Relay Control</title>
+  <title>NodeMCU 4-Light Control</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,6 +26,7 @@
     .status-on { background: #28a745; box-shadow: 0 0 10px #28a745; } .status-off { background: #6c757d; }
     .connection { position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 25px; color: white; font-weight: 500; z-index: 1000; }
     .connected { background: #28a745; } .disconnected { background: #dc3545; }
+    @media (max-width: 768px) { .controls { grid-template-columns: 1fr 1fr; padding: 20px; } }
   </style>
 </head>
 <body>
@@ -33,38 +34,41 @@
   
   <div class="container">
     <div class="header">
-      <h1>🏢 NodeMCU 4-Relay Control</h1>
+      <h1>💡 NodeMCU 4-Light Control</h1>
       <div class="status" id="mqttStatus">MQTT: Initializing</div>
     </div>
     
     <div class="controls">
       <div class="relay-card" id="relay1">
         <div class="status-indicator status-off" id="status1"></div>
-        <div class="relay-title">Motor 1 (D1)</div>
+        <div class="relay-title">Light 1 (D1)</div>
         <div class="relay-buttons">
           <button class="btn-on" onclick="toggleRelay(1, true)">ON</button>
           <button class="btn-off" onclick="toggleRelay(1, false)">OFF</button>
         </div>
       </div>
+      
       <div class="relay-card" id="relay2">
         <div class="status-indicator status-off" id="status2"></div>
-        <div class="relay-title">Motor 2 (D2)</div>
+        <div class="relay-title">Light 2 (D2)</div>
         <div class="relay-buttons">
           <button class="btn-on" onclick="toggleRelay(2, true)">ON</button>
           <button class="btn-off" onclick="toggleRelay(2, false)">OFF</button>
         </div>
       </div>
+      
       <div class="relay-card" id="relay3">
         <div class="status-indicator status-off" id="status3"></div>
-        <div class="relay-title">Motor 3 (D5)</div>
+        <div class="relay-title">Light 3 (D5)</div>
         <div class="relay-buttons">
           <button class="btn-on" onclick="toggleRelay(3, true)">ON</button>
           <button class="btn-off" onclick="toggleRelay(3, false)">OFF</button>
         </div>
       </div>
+      
       <div class="relay-card" id="relay4">
         <div class="status-indicator status-off" id="status4"></div>
-        <div class="relay-title">Motor 4 (D6)</div>
+        <div class="relay-title">Light 4 (D6)</div>
         <div class="relay-buttons">
           <button class="btn-on" onclick="toggleRelay(4, true)">ON</button>
           <button class="btn-off" onclick="toggleRelay(4, false)">OFF</button>
@@ -74,7 +78,7 @@
   </div>
 
   <script>
-    // FIXED MQTT - HiveMQ Cloud WebSocket
+    // HiveMQ Cloud WebSocket (UNCHANGED - Perfect)
     const mqttUrl = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
     const mqttUser = 'tohits';
     const mqttPassword = 'toh123@TOH';
@@ -88,11 +92,11 @@
     let relayStates = [false, false, false, false];
     
     function connectMQTT() {
-      console.log('Connecting to:', mqttUrl);
+      console.log('Connecting:', mqttUrl);
       mqttClient = mqtt.connect(mqttUrl, {
         username: mqttUser,
         password: mqttPassword,
-        clientId: 'WebControl_' + Math.random().toString(16).substr(2, 8),
+        clientId: 'LightControl_' + Math.random().toString(16).substr(2, 8),
         rejectUnauthorized: false
       });
       
@@ -102,14 +106,10 @@
         document.getElementById('connection').className = 'connection connected';
         document.getElementById('mqttStatus').textContent = 'MQTT: Connected';
         
-        topics.status.forEach(topic => {
-          mqttClient.subscribe(topic);
-          console.log('Subscribed:', topic);
-        });
+        topics.status.forEach(topic => mqttClient.subscribe(topic));
       });
       
       mqttClient.on('message', (topic, message) => {
-        console.log('RX:', topic, message.toString());
         const state = message.toString() === '1';
         const relayIndex = topics.status.indexOf(topic);
         if (relayIndex !== -1) {
@@ -126,12 +126,11 @@
     }
     
     function toggleRelay(relayNum, state) {
-      if (!mqttClient || !mqttClient.connected) {
+      if (!mqttClient?.connected) {
         alert('MQTT Not Connected!');
         return;
       }
       const topic = topics.set[relayNum - 1];
-      console.log('TX:', topic, state ? '1' : '0');
       mqttClient.publish(topic, state ? '1' : '0');
     }
     
@@ -148,7 +147,7 @@
     }
     
     connectMQTT();
-    setInterval(() => { if (!mqttClient.connected) connectMQTT(); }, 5000);
+    setInterval(() => { if (!mqttClient?.connected) connectMQTT(); }, 5000);
   </script>
 </body>
 </html>
