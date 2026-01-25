@@ -72,25 +72,31 @@
 
     const relayState = [false, false, false, false];
 
+    // Flag to ensure we render once the retained status is received
+    let statusReceived = false;
+
     client.on('connect', () => {
       console.log('MQTT Connected');
 
-      // Subscribe to relay states
+      // Subscribe to uptime and status first (important)
+      client.subscribe('home/uptime', { qos: 1 }, () => console.log('Subscribed to uptime'));
+      client.subscribe(statusTopic, { qos: 1 }, () => console.log('Subscribed to status'));
+
+      // Then subscribe to relay states
       for (let i = 1; i <= 4; i++) {
-        client.subscribe(`home/relay/${i}/state`);
+        client.subscribe(`home/relay/${i}/state`, { qos: 1 });
       }
-      // Subscribe to uptime and status
-      client.subscribe('home/uptime');
-      client.subscribe(statusTopic);
     });
 
     client.on('message', (topic, message) => {
       const payload = message.toString();
 
+      // Uptime update
       if (topic === 'home/uptime') {
         document.getElementById('uptime').innerText = 'Uptime: ' + formatUptime(parseInt(payload));
       }
 
+      // Online/Offline status
       if (topic === statusTopic) {
         const el = document.getElementById('status');
         if (payload === 'online') {
@@ -100,8 +106,10 @@
           el.innerText = 'Status: Offline';
           el.className = 'offline';
         }
+        statusReceived = true; // mark that we received retained status
       }
 
+      // Relay state updates
       const match = topic.match(/relay\/(\d)\/state/);
       if (match) {
         const index = parseInt(match[1]) - 1;
