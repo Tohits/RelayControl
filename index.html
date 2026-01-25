@@ -1,177 +1,98 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4-Channel Relay Dashboard</title>
-<style>
-  body { font-family: Arial, sans-serif; text-align:center; background:#f4f4f9; color:#333; }
-  h2 { margin-top: 20px; }
-  .relay-container { margin: 15px auto; }
-  button { width: 120px; height: 50px; font-size:18px; margin:5px; border:none; border-radius:10px; cursor:pointer; color:white; }
-  button:active { transform:translateY(2px); }
-  .on { background: limegreen; }
-  .off { background: tomato; }
-  .disabled { background: gray; cursor: not-allowed; }
+  <meta charset="UTF-8">
+  <title>ESP MQTT Relay Control</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-  #espStatus { font-weight:bold; font-size:18px; }
-  #mqttStatus { font-weight:bold; font-size:18px; margin-top:10px; }
-
-  /* Reset button style */
-  #resetBtn {
-    background: #444;
-    color: white;
-    width: 120px;
-    height: 50px;
-    font-size: 16px;
-    border-radius: 10px;
-    margin-top: 10px;
-    cursor: pointer;
-  }
-  #resetBtn:active {
-    transform: translateY(2px);
-    background: #666;
-  }
-</style>
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      background: #f2f2f2;
+    }
+    .relay {
+      margin: 15px;
+    }
+    button {
+      width: 140px;
+      padding: 15px;
+      font-size: 18px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .on {
+      background: green;
+      color: white;
+    }
+    .off {
+      background: red;
+      color: white;
+    }
+  </style>
 </head>
+
 <body>
+  <h2>ESP 4-Channel Relay (MQTT)</h2>
 
-<h2>4-Channel Relay Control</h2>
+  <div id="relays"></div>
 
-<div class="relay-container">
-  <p>Relay 1 Status: <b id="relay1Status">--</b></p>
-  <button id="relay1On" onclick="sendCommand(1,'ON')">ON</button>
-  <button id="relay1Off" onclick="sendCommand(1,'OFF')">OFF</button>
-</div>
+  <script>
+    const options = {
+      clean: true,
+      connectTimeout: 4000,
+      clientId: 'web_' + Math.random().toString(16).substr(2, 8),
+      username: 'tohits',
+      password: 'toh123@TOH'
+    };
 
-<div class="relay-container">
-  <p>Relay 2 Status: <b id="relay2Status">--</b></p>
-  <button id="relay2On" onclick="sendCommand(2,'ON')">ON</button>
-  <button id="relay2Off" onclick="sendCommand(2,'OFF')">OFF</button>
-</div>
+    const client = mqtt.connect(
+      'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt',
+      options
+    );
 
-<div class="relay-container">
-  <p>Relay 3 Status: <b id="relay3Status">--</b></p>
-  <button id="relay3On" onclick="sendCommand(3,'ON')">ON</button>
-  <button id="relay3Off" onclick="sendCommand(3,'OFF')">OFF</button>
-</div>
+    const relayState = [false, false, false, false];
 
-<div class="relay-container">
-  <p>Relay 4 Status: <b id="relay4Status">--</b></p>
-  <button id="relay4On" onclick="sendCommand(4,'ON')">ON</button>
-  <button id="relay4Off" onclick="sendCommand(4,'OFF')">OFF</button>
-</div>
+    client.on('connect', () => {
+      console.log('MQTT Connected');
 
-<hr>
-
-<p>ESP Status: <span id="espStatus" class="offline">OFFLINE</span></p>
-<p>ESP IP: <b id="espIP">--</b></p>
-<p>ESP Uptime: <b id="espUptime">--:--:--</b></p>
-<button id="resetBtn" onclick="resetESP()">RESET ESP</button>
-
-<p id="mqttStatus">MQTT: Disconnected</p>
-
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-<script>
-  const broker = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
-  const options = {
-    username: 'tohits',
-    password: 'toh123@TOH',
-    reconnectPeriod: 1000,
-    clean: true,
-    connectTimeout: 4000,
-  };
-  const client = mqtt.connect(broker, options);
-
-  let relayStatus = [null,"OFF","OFF","OFF","OFF"]; // 1..4
-
-  function updateRelayUI(ch){
-    const statusEl = document.getElementById(`relay${ch}Status`);
-    const onBtn = document.getElementById(`relay${ch}On`);
-    const offBtn = document.getElementById(`relay${ch}Off`);
-
-    statusEl.innerText = relayStatus[ch];
-
-    if(relayStatus[ch]==="ON"){
-      onBtn.className="on";
-      offBtn.className="off";
-    } else if(relayStatus[ch]==="OFF"){
-      onBtn.className="off";
-      offBtn.className="on";
-    } else {
-      onBtn.className="disabled";
-      offBtn.className="disabled";
-    }
-  }
-
-  function sendCommand(ch, cmd){
-    if(client.connected){
-      const swapped = (cmd==="ON")?"OFF":"ON"; // Active-low
-      client.publish(`relay${ch}/control`, swapped);
-    } else alert("MQTT not connected!");
-  }
-
-  function resetESP(){
-    if(client.connected && confirm("Reset ESP?")){
-      client.publish('esp/reset','RESET');
-    }
-  }
-
-  // ---------- MQTT EVENTS ----------
-  client.on('connect', () => {
-    document.getElementById("mqttStatus").innerText = "MQTT: Connected";
-    document.getElementById("mqttStatus").style.color = "limegreen";
-    client.subscribe([
-      'relay1/status','relay2/status','relay3/status','relay4/status',
-      'esp/status','esp/ip','esp/uptime'
-    ]);
-  });
-
-  client.on('reconnect', () => {
-    document.getElementById("mqttStatus").innerText = "MQTT: Reconnecting...";
-    document.getElementById("mqttStatus").style.color = "orange";
-  });
-
-  client.on('offline', () => {
-    document.getElementById("mqttStatus").innerText = "MQTT: Offline";
-    document.getElementById("mqttStatus").style.color = "red";
-  });
-
-  client.on('error', () => {
-    document.getElementById("mqttStatus").innerText = "MQTT: Error";
-    document.getElementById("mqttStatus").style.color = "red";
-  });
-
-  client.on('message', (topic,message)=>{
-    const msg = message.toString();
-
-    if(topic.startsWith('relay')){
-      for(let i=1;i<=4;i++){
-        if(topic===`relay${i}/status`){
-          relayStatus[i] = msg;
-          updateRelayUI(i);
-        }
+      for (let i = 1; i <= 4; i++) {
+        client.subscribe(`home/relay/${i}/state`);
       }
+    });
+
+    client.on('message', (topic, message) => {
+      const payload = message.toString();
+      const match = topic.match(/relay\/(\d)\/state/);
+      if (match) {
+        const index = parseInt(match[1]) - 1;
+        relayState[index] = payload === 'ON';
+        render();
+      }
+    });
+
+    function toggleRelay(relay) {
+      const cmd = relayState[relay - 1] ? 'OFF' : 'ON';
+      client.publish(`home/relay/${relay}/set`, cmd);
     }
 
-    if(topic==='esp/status'){
-      const espStatus = document.getElementById('espStatus');
-      espStatus.innerText = msg;
-      espStatus.className = (msg==="ONLINE")?"online":"offline";
+    function render() {
+      let html = '';
+      relayState.forEach((state, i) => {
+        html += `
+          <div class="relay">
+            <p>Relay ${i + 1}</p>
+            <button class="${state ? 'on' : 'off'}"
+              onclick="toggleRelay(${i + 1})">
+              ${state ? 'ON' : 'OFF'}
+            </button>
+          </div>`;
+      });
+      document.getElementById('relays').innerHTML = html;
     }
 
-    if(topic==='esp/ip') document.getElementById('espIP').innerText = msg;
-
-    if(topic==='esp/uptime'){
-      let totalSec = parseInt(msg);
-      let hours = Math.floor(totalSec / 3600);
-      let minutes = Math.floor((totalSec % 3600) / 60);
-      let seconds = totalSec % 60;
-
-      const formatted = `${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
-      document.getElementById('espUptime').innerText = formatted;
-    }
-  });
-</script>
+    render();
+  </script>
 </body>
 </html>
