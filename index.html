@@ -24,9 +24,50 @@
         .connected { color: green; }
         .disconnected { color: red; }
 
-        /* PWA Install Banner */
-        .pwa-banner { display: none; background: #2c3e50; color: white; padding: 10px 15px; border-radius: 8px; margin: 0 auto 15px auto; max-width: 400px; justify-content: space-between; align-items: center; }
-        .pwa-btn { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        /* Auto PWA Install Modal */
+        .pwa-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            backdrop-filter: blur(4px);
+        }
+        .pwa-modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 25px 20px;
+            max-width: 350px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+            animation: popIn 0.3s ease-out;
+        }
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .pwa-modal-icon { font-size: 48px; margin-bottom: 10px; }
+        .pwa-modal-content h3 { margin: 0 0 10px 0; color: #2c3e50; font-size: 20px; }
+        .pwa-modal-content p { color: #666; font-size: 14px; margin: 0 0 20px 0; line-height: 1.4; }
+        .pwa-modal-actions { display: flex; gap: 10px; }
+        .pwa-modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .pwa-modal-btn.install { background: #28a745; color: white; }
+        .pwa-modal-btn.install:hover { background: #218838; }
+        .pwa-modal-btn.cancel { background: #e9ecef; color: #495057; }
+        .pwa-modal-btn.cancel:hover { background: #dee2e6; }
 
         /* Device ID Input */
         .id-wrapper { background: white; padding: 15px; border-radius: 10px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
@@ -62,10 +103,17 @@
     <h2>🏠 Smart Home Hub</h2>
     <div id="mqttStatus" class="status-bar disconnected">Connecting to Cloud...</div>
 
-    <!-- PWA Install Banner -->
-    <div id="pwaInstallBanner" class="pwa-banner">
-        <span>Install App on Device</span>
-        <button id="pwaInstallBtn" class="pwa-btn">Install</button>
+    <!-- Auto PWA Install Modal Prompt -->
+    <div id="pwaModal" class="pwa-modal-overlay">
+        <div class="pwa-modal-content">
+            <div class="pwa-modal-icon">📲</div>
+            <h3>Install Smart Home Hub</h3>
+            <p id="pwaModalDesc">Install this app on your device for quick full-screen access and offline support!</p>
+            <div class="pwa-modal-actions">
+                <button id="pwaModalInstallBtn" class="pwa-modal-btn install">Install Now</button>
+                <button id="pwaModalCloseBtn" class="pwa-modal-btn cancel">Later</button>
+            </div>
+        </div>
     </div>
 
     <div class="id-wrapper">
@@ -114,29 +162,56 @@
         });
     }
 
-    // --- PWA INSTALL PROMPT ---
+    // --- AUTOMATIC PWA INSTALL PROMPT ON PAGE LOAD ---
     let deferredPrompt;
-    const installBanner = document.getElementById('pwaInstallBanner');
-    const installBtn = document.getElementById('pwaInstallBtn');
+    const pwaModal = document.getElementById('pwaModal');
+    const pwaModalInstallBtn = document.getElementById('pwaModalInstallBtn');
+    const pwaModalCloseBtn = document.getElementById('pwaModalCloseBtn');
+    const pwaModalDesc = document.getElementById('pwaModalDesc');
 
+    // Check if app is running in standalone PWA mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+    // Listen for browser install prompt trigger on load
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        installBanner.style.display = 'flex';
+
+        if (!isStandalone) {
+            // Automatically pop up modal on page load
+            pwaModal.style.display = 'flex';
+        }
     });
 
-    installBtn.addEventListener('click', () => {
+    // Handle "Install Now" click
+    pwaModalInstallBtn.addEventListener('click', () => {
+        pwaModal.style.display = 'none';
         if (deferredPrompt) {
             deferredPrompt.prompt();
             deferredPrompt.userChoice.then((choiceResult) => {
                 if (choiceResult.outcome === 'accepted') {
-                    console.log('User accepted PWA installation');
+                    console.log('User installed the PWA');
                 }
                 deferredPrompt = null;
-                installBanner.style.display = 'none';
             });
         }
     });
+
+    // Handle "Later" click
+    pwaModalCloseBtn.addEventListener('click', () => {
+        pwaModal.style.display = 'none';
+    });
+
+    // iOS Safari Auto-Detection
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS && !isStandalone) {
+        window.addEventListener('load', () => {
+            pwaModal.style.display = 'flex';
+            pwaModalDesc.innerText = "To install this app on iOS: Tap the Share button in Safari, then select 'Add to Home Screen'.";
+            pwaModalInstallBtn.innerText = "Got it";
+            pwaModalInstallBtn.onclick = () => pwaModal.style.display = 'none';
+        });
+    }
 
     // --- 1. MQTT CONFIGURATION ---
     const brokerUrl = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
@@ -153,9 +228,8 @@
 
     // State
     let activeDeviceId = null;
-    let relayStates = [false, false, false, false]; // Stores state of R1, R2, R3, R4
+    let relayStates = [false, false, false, false];
 
-    // UI Elements
     const ui = {
         mqtt: document.getElementById('mqttStatus'),
         input: document.getElementById('targetDevice'),
@@ -169,31 +243,23 @@
         ]
     };
 
-    // --- 2. MQTT LOGIC ---
     client.on('connect', () => {
         console.log("Connected to Cloud");
         ui.mqtt.innerText = "☁️ Cloud Connected";
         ui.mqtt.className = "status-bar connected";
-
-        // Subscribe to finding ALL devices initially
         client.subscribe('home/+/status');
     });
 
     client.on('message', (topic, message) => {
         const msg = message.toString();
-        // Topic format: home / DEVICE_ID / ...
         const parts = topic.split('/');
-
         if (parts.length < 3 || parts[0] !== 'home') return;
+        const devId = parts[1];
 
-        const devId = parts[1]; // e.g., ESP_A1B2C3
-
-        // Auto-Discovery: If we haven't picked a device, pick the first one we hear
         if (!activeDeviceId) {
             setActiveDevice(devId);
         }
 
-        // Only process messages for the ACTIVE device
         if (devId === activeDeviceId) {
             handleMessage(parts, msg);
         }
@@ -203,42 +269,30 @@
         activeDeviceId = id;
         ui.input.value = activeDeviceId;
         console.log("Locked onto Device: " + activeDeviceId);
-
-        // Subscribe to specific device topics
         client.subscribe(`home/${activeDeviceId}/relay/+/state`);
         client.subscribe(`home/${activeDeviceId}/uptime`);
     }
 
     function handleMessage(parts, msg) {
-        // 1. Relay State: home/ID/relay/X/state
         if (parts[2] === 'relay' && parts[4] === 'state') {
-            const rIndex = parseInt(parts[3]) - 1; // Convert '1' to 0
+            const rIndex = parseInt(parts[3]) - 1;
             if (rIndex >= 0 && rIndex < 4) {
                 relayStates[rIndex] = (msg === 'ON');
                 updateButton(rIndex);
             }
-        }
-        // 2. Status: home/ID/status
-        else if (parts[2] === 'status') {
+        } else if (parts[2] === 'status') {
             ui.status.innerText = msg.toUpperCase();
             ui.status.style.color = (msg === 'online') ? 'green' : 'orange';
-        }
-        // 3. Uptime: home/ID/uptime
-        else if (parts[2] === 'uptime') {
+        } else if (parts[2] === 'uptime') {
             ui.uptime.innerText = formatTime(parseInt(msg));
         }
     }
 
-    // --- 3. CONTROLS ---
     function toggleRelay(rNum) {
         if (!activeDeviceId) return alert("Waiting for device...");
-
         const rIndex = rNum - 1;
-        // Logic: If currently ON, send OFF. Else send ON.
         const cmd = relayStates[rIndex] ? "OFF" : "ON";
-
-        const topic = `home/${activeDeviceId}/relay/${rNum}/set`;
-        client.publish(topic, cmd);
+        client.publish(`home/${activeDeviceId}/relay/${rNum}/set`, cmd);
     }
 
     function sendUpdate() {
@@ -253,28 +307,19 @@
     }
 
     function manualID(val) {
-        // Allow user to manually type ID if auto-discovery fails
         if(val.length > 5) {
             activeDeviceId = val;
-            // Resubscribe to new ID
             client.subscribe(`home/${activeDeviceId}/relay/+/state`);
             client.subscribe(`home/${activeDeviceId}/uptime`);
             client.subscribe(`home/${activeDeviceId}/status`);
         }
     }
 
-    // --- 4. UI HELPERS ---
     function updateButton(index) {
         const btn = ui.btns[index];
         const isOn = relayStates[index];
-
-        if (isOn) {
-            btn.className = "btn on";
-            btn.innerText = "ON";
-        } else {
-            btn.className = "btn off";
-            btn.innerText = "OFF";
-        }
+        btn.className = isOn ? "btn on" : "btn off";
+        btn.innerText = isOn ? "ON" : "OFF";
     }
 
     function formatTime(seconds) {
