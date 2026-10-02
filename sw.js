@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-home-hub-v1';
+const CACHE_NAME = 'smart-home-hub-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -11,9 +11,15 @@ const ASSETS_TO_CACHE = [
 // Install Event
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[Service Worker] Caching app shell & assets');
-      return cache.addAll(ASSETS_TO_CACHE);
+      for (const asset of ASSETS_TO_CACHE) {
+        try {
+          await cache.add(asset);
+        } catch (e) {
+          console.warn('[Service Worker] Failed to cache asset:', asset, e);
+        }
+      }
     }).then(() => self.skipWaiting())
   );
 });
@@ -36,20 +42,18 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event
 self.addEventListener('fetch', (event) => {
-  // Ignore non-HTTP/HTTPS requests
   if (!event.request.url.startsWith('http')) return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch fresh copy in background to update cache
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, networkResponse);
             });
           }
-        }).catch(() => {/* Ignore offline network errors */});
+        }).catch(() => {/* Ignore network errors when offline */});
         return cachedResponse;
       }
       return fetch(event.request);
