@@ -2,17 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Smart Home Hub</title>
+
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Home Hub">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; text-align: center; background: #eef2f5; color: #333; margin: 0; padding: 20px; }
         h2 { color: #2c3e50; margin-bottom: 5px; }
-        
+
         /* Status Bar */
         .status-bar { margin-bottom: 20px; font-size: 14px; font-weight: bold; }
         .connected { color: green; }
         .disconnected { color: red; }
+
+        /* PWA Install Banner */
+        .pwa-banner { display: none; background: #2c3e50; color: white; padding: 10px 15px; border-radius: 8px; margin: 0 auto 15px auto; max-width: 400px; justify-content: space-between; align-items: center; }
+        .pwa-btn { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
 
         /* Device ID Input */
         .id-wrapper { background: white; padding: 15px; border-radius: 10px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
@@ -22,7 +36,7 @@
         .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; max-width: 400px; margin: 0 auto; }
         .relay-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: 0.2s; }
         .relay-card h3 { margin: 0 0 10px 0; font-size: 16px; color: #555; }
-        
+
         /* Toggle Buttons */
         .btn { width: 100%; padding: 15px; font-size: 18px; border: none; cursor: pointer; border-radius: 8px; font-weight: bold; transition: 0.2s; }
         .btn.on { background: #28a745; color: white; box-shadow: 0 4px #1e7e34; }
@@ -47,6 +61,12 @@
 
     <h2>🏠 Smart Home Hub</h2>
     <div id="mqttStatus" class="status-bar disconnected">Connecting to Cloud...</div>
+
+    <!-- PWA Install Banner -->
+    <div id="pwaInstallBanner" class="pwa-banner">
+        <span>Install App on Device</span>
+        <button id="pwaInstallBtn" class="pwa-btn">Install</button>
+    </div>
 
     <div class="id-wrapper">
         <label style="display:block; font-size:12px; color:#999; margin-bottom:5px;">CONTROL DEVICE ID</label>
@@ -85,6 +105,39 @@
     </div>
 
 <script>
+    // --- SERVICE WORKER REGISTRATION (PWA) ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('PWA Service Worker Registered:', reg.scope))
+                .catch(err => console.error('Service Worker Registration Failed:', err));
+        });
+    }
+
+    // --- PWA INSTALL PROMPT ---
+    let deferredPrompt;
+    const installBanner = document.getElementById('pwaInstallBanner');
+    const installBtn = document.getElementById('pwaInstallBtn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBanner.style.display = 'flex';
+    });
+
+    installBtn.addEventListener('click', () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('User accepted PWA installation');
+                }
+                deferredPrompt = null;
+                installBanner.style.display = 'none';
+            });
+        }
+    });
+
     // --- 1. MQTT CONFIGURATION ---
     const brokerUrl = 'wss://93bad3def29641e399de9a7b9c676613.s1.eu.hivemq.cloud:8884/mqtt';
     const options = {
@@ -97,7 +150,7 @@
     };
 
     const client = mqtt.connect(brokerUrl, options);
-    
+
     // State
     let activeDeviceId = null;
     let relayStates = [false, false, false, false]; // Stores state of R1, R2, R3, R4
@@ -121,7 +174,7 @@
         console.log("Connected to Cloud");
         ui.mqtt.innerText = "☁️ Cloud Connected";
         ui.mqtt.className = "status-bar connected";
-        
+
         // Subscribe to finding ALL devices initially
         client.subscribe('home/+/status');
     });
@@ -130,9 +183,9 @@
         const msg = message.toString();
         // Topic format: home / DEVICE_ID / ...
         const parts = topic.split('/');
-        
+
         if (parts.length < 3 || parts[0] !== 'home') return;
-        
+
         const devId = parts[1]; // e.g., ESP_A1B2C3
 
         // Auto-Discovery: If we haven't picked a device, pick the first one we hear
@@ -150,7 +203,7 @@
         activeDeviceId = id;
         ui.input.value = activeDeviceId;
         console.log("Locked onto Device: " + activeDeviceId);
-        
+
         // Subscribe to specific device topics
         client.subscribe(`home/${activeDeviceId}/relay/+/state`);
         client.subscribe(`home/${activeDeviceId}/uptime`);
@@ -179,11 +232,11 @@
     // --- 3. CONTROLS ---
     function toggleRelay(rNum) {
         if (!activeDeviceId) return alert("Waiting for device...");
-        
+
         const rIndex = rNum - 1;
         // Logic: If currently ON, send OFF. Else send ON.
         const cmd = relayStates[rIndex] ? "OFF" : "ON";
-        
+
         const topic = `home/${activeDeviceId}/relay/${rNum}/set`;
         client.publish(topic, cmd);
     }
@@ -192,7 +245,7 @@
         if (!activeDeviceId) return alert("No device selected.");
         const url = document.getElementById('otaUrl').value.trim();
         if(!url) return alert("Paste a URL first.");
-        
+
         if(confirm(`Flash firmware to ${activeDeviceId}?`)) {
             client.publish(`home/${activeDeviceId}/update`, url);
             alert("Update command sent!");
@@ -214,7 +267,7 @@
     function updateButton(index) {
         const btn = ui.btns[index];
         const isOn = relayStates[index];
-        
+
         if (isOn) {
             btn.className = "btn on";
             btn.innerText = "ON";
